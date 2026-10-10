@@ -1,0 +1,7 @@
+# OAuth2 Security Protocol
+
+## Section 1: Token Lifespans
+Access tokens expire after exactly 900 seconds (15 minutes). Refresh tokens are single-use with cryptographic rotation.
+
+## Section 2: Mathematical Rate Limiting
+Max request rate is strictly 100 requests per minute with an exponential backoff factor of 2.0.

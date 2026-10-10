@@ -1,0 +1,7 @@
+{
+  "name": "Autonomous Multi-Agent Development System",
+  "description": "Production-grade autonomous multi-agent software engineering system with DAG orchestration, independent verification, and RAG document intelligence.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

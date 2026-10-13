@@ -1,0 +1,32 @@
+[
+  {
+    "token": "sess_81c2de4a6807d55cb1961a0d8096cf84fbc2a23abd557a30",
+    "userId": "user_a",
+    "createdAt": 1791724419294,
+    "expiresAt": 1794316419294
+  },
+  {
+    "token": "sess_586324e70f87341a271b0eeac933cd66974d55ebdd208da1",
+    "userId": "user_b",
+    "createdAt": 1791724425167,
+    "expiresAt": 1794316425167
+  },
+  {
+    "token": "sess_3068dfcbf89ab7d36e7e70227bb8cea96360587b082cda45",
+    "userId": "usr_1791724430501_ae0h",
+    "createdAt": 1791724430501,
+    "expiresAt": 1794316430501
+  },
+  {
+    "token": "sess_7be68e55150faf8c77ad45955699352f8597758c9a4c44a9",
+    "userId": "user_a",
+    "createdAt": 1791724594337,
+    "expiresAt": 1794316594337
+  },
+  {
+    "token": "sess_415c1b366d346081f18e3b48b25242056d0e2b502f039dae",
+    "userId": "user_a",
+    "createdAt": 1791725858488,
+    "expiresAt": 1794317858488
+  }
+]

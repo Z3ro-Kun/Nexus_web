@@ -10,11 +10,14 @@ import { ClarificationDialog } from './components/ClarificationDialog.js';
 import { TestSuiteModal } from './components/TestSuiteModal.js';
 import { DocumentsDrawer } from './components/DocumentsDrawer.js';
 import { SystemConfigModal } from './components/SystemConfigModal.js';
+import { LoginPage } from './components/LoginPage.js';
 import { api } from './api.js';
-import { TaskRecord, DocumentRecord, DAGNode, AuditEvent } from './types.js';
+import { TaskRecord, DocumentRecord, DAGNode, AuditEvent, UserRecord } from './types.js';
 import { MessageSquare, LayoutGrid, FileCode, Terminal } from 'lucide-react';
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState<UserRecord | null>(null);
+  const [authChecking, setAuthChecking] = useState(true);
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   // Initial landing page is clean New Task workspace (currentTask = null)
   const [currentTask, setCurrentTask] = useState<TaskRecord | null>(null);
@@ -32,14 +35,51 @@ export default function App() {
 
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  // Initial load: Fetch document library & past sessions list (do not auto-load past session)
+  // Initial load: Check if user session exists and fetch private data
   useEffect(() => {
-    api.getDocuments().then(setDocuments).catch(console.error);
-    api.getTasks().then((taskList) => {
-      setTasks(taskList);
-      // Keep landing page on New Task view as requested
-    }).catch(console.error);
+    api.getCurrentUser()
+      .then(async (user) => {
+        if (user) {
+          setCurrentUser(user);
+          try {
+            const [taskList, docs] = await Promise.all([api.getTasks(), api.getDocuments()]);
+            setTasks(taskList);
+            setDocuments(docs);
+          } catch (e) {
+            console.error('Failed to load user tasks/docs:', e);
+          }
+        }
+      })
+      .catch(console.error)
+      .finally(() => {
+        setAuthChecking(false);
+      });
   }, []);
+
+  const handleLoginSuccess = async (user: UserRecord) => {
+    setCurrentUser(user);
+    setCurrentTask(null);
+    setEvents([]);
+    try {
+      const [taskList, docs] = await Promise.all([api.getTasks(), api.getDocuments()]);
+      setTasks(taskList);
+      setDocuments(docs);
+    } catch (e) {
+      console.error('Failed to load tasks after login:', e);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    await api.logout();
+    setCurrentUser(null);
+    setTasks([]);
+    setCurrentTask(null);
+    setEvents([]);
+  };
 
   // Subscribe to SSE stream whenever currentTask ID changes
   useEffect(() => {
@@ -49,10 +89,13 @@ export default function App() {
       eventSourceRef.current.close();
     }
 
-    const es = new EventSource(`/api/tasks/${currentTask.id}/events`);
+    const token = api.getAuthToken();
+    const url = `/api/tasks/${currentTask.id}/events${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    const es = new EventSource(url);
     eventSourceRef.current = es;
 
     es.onmessage = (e) => {
+      if (!e.data || e.data.startsWith(':')) return;
       try {
         const evt: AuditEvent = JSON.parse(e.data);
         setEvents((prev) => {
@@ -60,28 +103,41 @@ export default function App() {
           return [...prev, evt];
         });
 
-        // If clarification event or task state changes, refresh task
         if (evt.type === 'clarification_requested') {
           setShowClarification(true);
         }
 
-        api.getTask(currentTask.id).then((t) => {
-          setCurrentTask(t);
-          setTasks((prev) => prev.map((item) => (item.id === t.id ? t : item)));
-          if (t.status === 'waiting_clarification') {
-            setShowClarification(true);
-          }
-        }).catch(console.error);
-      } catch (err) {
-        console.error('SSE parse error:', err);
+        // Only refresh task document on key milestones (not every stream chunk)
+        if (evt.type === 'task_completed' || evt.type === 'task_failed' || evt.type === 'clarification_requested') {
+          api.getTask(currentTask.id).then((t) => {
+            setCurrentTask(t);
+            setTasks((prev) => prev.map((item) => (item.id === t.id ? t : item)));
+            if (t.status === 'waiting_clarification') {
+              setShowClarification(true);
+            }
+          }).catch(() => {});
+        }
+
+        if (evt.type === 'task_completed' || evt.type === 'task_failed') {
+          es.close();
+        }
+      } catch {
+        // Ignore unparseable pings or heartbeat comments
       }
     };
 
     es.onerror = () => {
-      // Fallback polling
+      // If task already reached terminal state, close cleanly without error logging
+      if (currentTask.status === 'completed' || currentTask.status === 'failed') {
+        es.close();
+        return;
+      }
       api.getTask(currentTask.id).then((t) => {
         setCurrentTask(t);
         setTasks((prev) => prev.map((item) => (item.id === t.id ? t : item)));
+        if (t.status === 'completed' || t.status === 'failed') {
+          es.close();
+        }
       }).catch(() => {});
     };
 
@@ -144,12 +200,43 @@ export default function App() {
     }
   };
 
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      await api.deleteTask(taskId);
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      if (currentTask?.id === taskId) {
+        setCurrentTask(null);
+        setEvents([]);
+      }
+    } catch (err: any) {
+      alert(`Error deleting chat: ${err.message}`);
+    }
+  };
+
+  if (authChecking) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs text-slate-400 font-mono tracking-wider">Verifying secure session...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
       <Header
         currentTask={currentTask}
         tasks={tasks}
+        currentUser={currentUser}
+        onLogout={handleLogout}
         onSelectTask={loadTask}
+        onDeleteTask={handleDeleteTask}
         onNewTask={() => setCurrentTask(null)}
         onOpenTests={() => setShowTestSuite(true)}
         onOpenConfig={() => setShowConfig(true)}
@@ -163,8 +250,12 @@ export default function App() {
           <InputWorkspace
             onSubmit={handleStartTask}
             isLoading={loading}
+            currentUser={currentUser}
             onDocumentUploaded={(doc) => setDocuments((prev) => [doc, ...prev])}
             existingDocs={documents}
+            recentTasks={tasks}
+            onSelectTask={loadTask}
+            onDeleteTask={handleDeleteTask}
           />
         ) : (
           <div className="space-y-4">
@@ -233,6 +324,7 @@ export default function App() {
               <ChatView
                 task={currentTask}
                 onSendFollowUp={handleSendFollowUp}
+                onDeleteTask={handleDeleteTask}
                 isLoading={loading || ['analyzing', 'planning', 'executing', 'reviewing', 'verifying', 'replanning'].includes(currentTask.status)}
                 onSelectNode={(node) => setSelectedNode(node)}
               />

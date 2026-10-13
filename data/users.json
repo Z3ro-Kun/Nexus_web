@@ -1,0 +1,49 @@
+[
+  {
+    "id": "user_a",
+    "username": "user_a",
+    "displayName": "User 1",
+    "avatarColor": "#06b6d4",
+    "createdAt": 1700000000000,
+    "salt": "99101aefe38c1a2b957cdbde6a24b932",
+    "passwordHash": "f7b6cd80c2a72be07379c3d265518ea636534addb5c0b4be13409d0926bfb217",
+    "lastLoginAt": 1791725858487
+  },
+  {
+    "id": "user_b",
+    "username": "user_b",
+    "displayName": "User 2",
+    "avatarColor": "#ec4899",
+    "createdAt": 1700000001000,
+    "salt": "32e8b2035828521623e7f38e9ce915de",
+    "passwordHash": "58d2e533eee712be4a88e0c7d70639d78ebd7b2beab66a2258f0b33865eefdef",
+    "lastLoginAt": 1791724425166
+  },
+  {
+    "id": "usr_1791723400392_w5zr",
+    "username": "user_ala",
+    "displayName": "user_ala",
+    "avatarColor": "#8b5cf6",
+    "createdAt": 1791723400392
+  },
+  {
+    "id": "usr_1791724430501_ae0h",
+    "username": "tester_99",
+    "displayName": "Test Engineer",
+    "avatarColor": "#10b981",
+    "createdAt": 1791724430501,
+    "salt": "8c9c80698c8a53a33d423ee004699325",
+    "passwordHash": "1c88d1bcf54eaadf0a819345d74e58d13a2f620d2d3eb4a88877ed588597ed8f",
+    "lastLoginAt": 1791724430501
+  },
+  {
+    "id": "usr_1791724493526_dekw",
+    "username": "zerokun",
+    "displayName": "Zero",
+    "avatarColor": "#f59e0b",
+    "createdAt": 1791724493526,
+    "salt": "3ee442502e33139f86335a6c0a4face6",
+    "passwordHash": "46859a147414e9869c7467a28f05e121d5146fd8b520e63252795ee0400abbf0",
+    "lastLoginAt": 1791724565566
+  }
+]

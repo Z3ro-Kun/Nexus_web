@@ -15,9 +15,10 @@ export class MockProvider implements LLMProvider {
     // Check what agent role or prompt context is requesting
     if (options.responseFormat === 'json' || sysInstruction.includes('JSON')) {
       if (sysInstruction.includes('Requirements Analyst')) {
-        const isAmbiguous = lastUserMessage.toLowerCase().includes('maybe') || 
-                            lastUserMessage.toLowerCase().includes('something like') ||
-                            lastUserMessage.length < 15;
+        const isAmbiguous =
+          lastUserMessage.toLowerCase().includes('maybe') ||
+          lastUserMessage.toLowerCase().includes('something like') ||
+          lastUserMessage.length < 15;
         if (isAmbiguous) {
           responseText = JSON.stringify({
             status: 'needs_clarification',
@@ -100,20 +101,41 @@ export class MockProvider implements LLMProvider {
           ],
         });
       } else if (sysInstruction.includes('Implementer')) {
-        const isSql = /\bsql\b|\bquery\b|\bselect\b|\bjoin\b|\bleetcode\s*1174\b|\bimmediate food\b/i.test(lastUserMessage);
+        const leetcodeMatch = lastUserMessage.match(/leetcode\s*(\d+)/i);
+        const leetcodeNum = leetcodeMatch ? leetcodeMatch[1] : null;
+        const isSql = /\bsql\b|\bquery\b|\bselect\b|\bjoin\b|\btable\b|\bdatabase\b/i.test(lastUserMessage) || Boolean(leetcodeNum);
         const isPython = /python|\.py/i.test(lastUserMessage);
         const isBubbleSort = /bubble\s*sort/i.test(lastUserMessage);
         const isTestRequest = /test|tests|unittest|pytest|assert|edge case/i.test(lastUserMessage);
         const isUpdate = /update|modify|follow-up|follow up|add|extend|optimize/i.test(lastUserMessage);
 
-        if (isSql) {
+        if (leetcodeNum === '570' || (isSql && /manager|direct report/i.test(lastUserMessage))) {
           responseText = JSON.stringify({
-            summary: "Implemented LeetCode 1174 Immediate Food Delivery II solution in clean SQL.",
+            summary: 'Implemented LeetCode 570 Managers with at Least 5 Direct Reports in clean SQL.',
             files: [
               {
-                filename: "leetcode_1174.sql",
-                title: "LeetCode 1174: Immediate Food Delivery II",
-                language: "sql",
+                filename: 'leetcode_570.sql',
+                title: 'LeetCode 570: Managers with at Least 5 Direct Reports',
+                language: 'sql',
+                content: `-- LeetCode 570: Managers with at Least 5 Direct Reports
+-- Write a solution to find managers with at least five direct reports.
+
+SELECT e.name
+FROM Employee e
+JOIN Employee r ON e.id = r.managerId
+GROUP BY e.id, e.name
+HAVING COUNT(r.id) >= 5;`,
+              },
+            ],
+          });
+        } else if (leetcodeNum === '1174' || (isSql && /immediate food|customer_pref/i.test(lastUserMessage))) {
+          responseText = JSON.stringify({
+            summary: 'Implemented LeetCode 1174 Immediate Food Delivery II solution in clean SQL.',
+            files: [
+              {
+                filename: 'leetcode_1174.sql',
+                title: 'LeetCode 1174: Immediate Food Delivery II',
+                language: 'sql',
                 content: `-- LeetCode 1174: Immediate Food Delivery II
 -- Find the percentage of immediate orders in the first orders of all customers, rounded to 2 decimal places.
 
@@ -127,19 +149,43 @@ WHERE (customer_id, order_date) IN (
     SELECT customer_id, MIN(order_date)
     FROM Delivery
     GROUP BY customer_id
-);`
-              }
-            ]
+);`,
+              },
+            ],
+          });
+        } else if (leetcodeNum && isSql) {
+          responseText = JSON.stringify({
+            summary: `Implemented LeetCode ${leetcodeNum} SQL solution.`,
+            files: [
+              {
+                filename: `leetcode_${leetcodeNum}.sql`,
+                title: `LeetCode ${leetcodeNum} Solution`,
+                language: 'sql',
+                content: `-- LeetCode ${leetcodeNum} SQL Solution\n\nSELECT * FROM Solution;\n`,
+              },
+            ],
+          });
+        } else if (isSql) {
+          responseText = JSON.stringify({
+            summary: 'Implemented clean SQL query solution.',
+            files: [
+              {
+                filename: 'solution.sql',
+                title: 'SQL Solution',
+                language: 'sql',
+                content: `-- SQL Query Solution\nSELECT id, name FROM records ORDER BY id ASC;\n`,
+              },
+            ],
           });
         } else if (isBubbleSort && isPython) {
           if (isTestRequest || isUpdate) {
             responseText = JSON.stringify({
-              summary: "Updated bubble_sort.py (v2) with comprehensive unittest suite, type annotations, and edge case coverage.",
+              summary: 'Updated bubble_sort.py (v2) with comprehensive unittest suite, type annotations, and edge case coverage.',
               files: [
                 {
-                  filename: "bubble_sort.py",
-                  title: "Bubble Sort Algorithm with Unit Tests",
-                  language: "python",
+                  filename: 'bubble_sort.py',
+                  title: 'Bubble Sort Algorithm with Unit Tests',
+                  language: 'python',
                   content: `import unittest
 
 def bubble_sort(arr: list, reverse: bool = False) -> list:
@@ -177,18 +223,18 @@ class TestBubbleSort(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-`
-                }
-              ]
+`,
+                },
+              ],
             });
           } else {
             responseText = JSON.stringify({
-              summary: "Implemented optimized Bubble Sort in Python with early-exit flag and docstrings.",
+              summary: 'Implemented optimized Bubble Sort in Python with early-exit flag and docstrings.',
               files: [
                 {
-                  filename: "bubble_sort.py",
-                  title: "Bubble Sort Algorithm",
-                  language: "python",
+                  filename: 'bubble_sort.py',
+                  title: 'Bubble Sort Algorithm',
+                  language: 'python',
                   content: `def bubble_sort(arr: list, reverse: bool = False) -> list:
     """
     Sorts a list of elements using the Bubble Sort algorithm.
@@ -211,52 +257,58 @@ if __name__ == "__main__":
 if __name__ == "__main__":
     data = [64, 34, 25, 12, 22, 11, 90]
     print("Sorted:", bubble_sort(data))
-`
-                }
-              ]
+`,
+                },
+              ],
             });
           }
         } else if (isPython) {
           responseText = JSON.stringify({
-            summary: "Implemented Python solution.",
+            summary: 'Implemented Python solution.',
             files: [
               {
-                filename: "solution.py",
-                title: "Python Solution",
-                language: "python",
-                content: `def solve():\n    print("Solution executed successfully")\n\nif __name__ == "__main__":\n    solve()\n`
-              }
-            ]
+                filename: 'solution.py',
+                title: 'Python Solution',
+                language: 'python',
+                content: `def solve():\n    print("Solution executed successfully")\n\nif __name__ == "__main__":\n    solve()\n`,
+              },
+            ],
           });
         } else {
           responseText = JSON.stringify({
-            summary: "Implemented solution in TypeScript.",
+            summary: 'Implemented solution in TypeScript.',
             files: [
               {
-                filename: "solution.ts",
-                title: "Solution Deliverable",
-                language: "typescript",
-                content: `export function solve(): boolean {\n  return true;\n}\n`
-              }
-            ]
+                filename: 'solution.ts',
+                title: 'Solution Deliverable',
+                language: 'typescript',
+                content: `export function solve(): boolean {\n  return true;\n}\n`,
+              },
+            ],
           });
         }
-      } else if (sysInstruction.includes('Verifier')) {
+      } else if (sysInstruction.includes('Reviewer')) {
         responseText = JSON.stringify({
           verdict: 'passed',
-          confidence: 0.98,
+          score: 95,
           findings: [
-            'All acceptance criteria verified against delivered artifacts.',
-            'Deterministic test suite executed cleanly with 100% pass rate.',
-            'No fabricated evidence or unverified assertions detected.',
+            {
+              severity: 'info',
+              category: 'Performance',
+              description: 'Algorithmic complexity matches criteria with bounded memory allocation.',
+            },
           ],
-          testsRun: [
-            { name: 'Artifact Integrity Check', passed: true, output: 'Files exist and non-empty' },
-            { name: 'Schema Invariant Test', passed: true, output: 'All types match specifications' },
+          criteriaChecklist: [
+            {
+              criterion: 'Executable assertions pass without unhandled rejections',
+              met: true,
+              notes: 'Syntax and boundary validations proven satisfied.',
+            },
           ],
+          recommendations: ['Maintain strict type annotations across public boundaries.'],
         });
       } else if (sysInstruction.includes('Replanner')) {
-        const nodeIdMatch = lastUserMessage.match(/\[([a-zA-Z0-9_-]+)\]/) || lastUserMessage.match(/node[:\s]+([a-zA-Z0-9_-]+)/i);
+        const nodeIdMatch = lastUserMessage.match(/\[([a-zA-Z0-9_\-]+)\]/);
         const targetNodeId = nodeIdMatch ? nodeIdMatch[1] : 'n_fail';
         responseText = JSON.stringify({
           diagnosis: 'Isolated execution defect. Subtask failed assertions without affecting upstream architecture.',
@@ -270,12 +322,39 @@ if __name__ == "__main__":
           summary: 'Simulated structured output generated successfully.',
         });
       }
-    } else if (sysInstruction.includes('Senior Software Engineer') || sysInstruction.includes('ChatGPT') || sysInstruction.includes('Gemini')) {
-      const isSql = /\bsql\b|\bquery\b|\bselect\b|\bjoin\b|\bleetcode\s*1174\b|\bimmediate food\b/i.test(lastUserMessage);
-      const isBubbleSort = /bubble\s*sort/i.test(lastUserMessage) || lastUserMessage.includes('bubble_sort.py');
-      const isTestOrFollowUp = /test|tests|unittest|update|follow-up|follow up/i.test(lastUserMessage);
+    } else if (
+      sysInstruction.includes('Senior Software Engineer') ||
+      sysInstruction.includes('ChatGPT') ||
+      sysInstruction.includes('Gemini')
+    ) {
+      // 1. Check if a delivered artifact is provided in the message to synthesize faithfully
+      const artifactMatch = lastUserMessage.match(/File:\s*([^\s\(\)]+)\s*(?:\(([^)]+)\))?:\s*```([a-z]*)\n([\s\S]*?)```/i);
+      const deliveredFilename = artifactMatch ? artifactMatch[1] : null;
+      const deliveredCode = artifactMatch ? artifactMatch[4].trim() : '';
 
-      if (isSql) {
+      const leetcodeMatch = lastUserMessage.match(/leetcode\s*(\d+)/i);
+      const leetcodeNum = leetcodeMatch ? leetcodeMatch[1] : (deliveredFilename?.match(/leetcode_(\d+)/)?.[1] || null);
+
+      if (leetcodeNum === '570' || deliveredFilename === 'leetcode_570.sql') {
+        responseText = `### LeetCode 570: Managers with at Least 5 Direct Reports (SQL Solution)
+
+Here is the clean SQL query solving LeetCode 570:
+
+\`\`\`sql
+SELECT e.name
+FROM Employee e
+JOIN Employee r ON e.id = r.managerId
+GROUP BY e.id, e.name
+HAVING COUNT(r.id) >= 5;
+\`\`\`
+
+#### Explanation
+- **Manager Self-Join:** Connects each manager (\`e.id\`) to their direct reports (\`r.managerId\`).
+- **Aggregation by Manager:** Groups by \`e.id\` and \`e.name\` to aggregate reports per individual manager.
+- **Threshold Filtering:** The \`HAVING COUNT(r.id) >= 5\` condition retains only managers overseeing at least 5 reporting employees.
+
+The complete solution is persisted as **\`leetcode_570.sql\`** in the artifact preview card below ready for direct download.`;
+      } else if (leetcodeNum === '1174' || deliveredFilename === 'leetcode_1174.sql') {
         responseText = `### LeetCode 1174: Immediate Food Delivery II (SQL Solution)
 
 Here is the clean SQL query solving LeetCode 1174:
@@ -300,64 +379,39 @@ WHERE (customer_id, order_date) IN (
 - **Percentage & Rounding:** Divides by total first orders and rounds to 2 decimal places using \`ROUND(..., 2)\`.
 
 The clean SQL query is delivered as **\`leetcode_1174.sql\`** in the preview card below.`;
-      } else if (isBubbleSort) {
-        if (isTestOrFollowUp) {
-          responseText = `### Updated \`bubble_sort.py\` with Comprehensive Unit Tests
+      } else if (deliveredFilename && deliveredCode) {
+        responseText = `### Solution: \`${deliveredFilename}\`
 
-I have updated the **\`bubble_sort.py\`** deliverable (Version 2) to include an automated **\`unittest\`** suite covering all standard conditions and edge cases.
+Here is the implementation deliverable for your request:
 
-#### What Was Added
-1. **Automated Test Suite (\`TestBubbleSort\`):**
-   - **Standard Array:** Verifies ascending sorting of unordered integers.
-   - **Already Sorted:** Confirms the early-exit optimization triggers in $O(n)$ time.
-   - **Reverse Sorted:** Evaluates worst-case performance $O(n^2)$.
-   - **Descending Flag:** Tests the \`reverse=True\` optional parameter.
-   - **Duplicates & Negatives:** Ensures stability with duplicate values and negative numbers.
-   - **Empty & Single-Element Lists:** Edge-case boundary assertions.
-
-2. **Run Instructions:**
-   You can run the tests directly in your terminal:
-   \`\`\`bash
-   python bubble_sort.py
-   \`\`\`
-
-The updated **\`bubble_sort.py\`** artifact is ready below for preview or direct download!`;
-        } else {
-          responseText = `### Python Bubble Sort Algorithm Implementation
-
-Here is the complete, production-ready Python implementation of the **Bubble Sort** algorithm.
-
-#### How It Works
-Bubble Sort compares adjacent elements and swaps them if they are in the wrong order. This pass is repeated until the list is sorted.
-
-- **Early-Exit Optimization:** Uses a boolean \`swapped\` flag. If no swaps occur during an entire pass, the algorithm terminates immediately.
-- **Time Complexity:**
-  - **Best Case:** $\\mathcal{O}(n)$ when the array is already sorted.
-  - **Average & Worst Case:** $\\mathcal{O}(n^2)$ when elements are randomly ordered or reversed.
-- **Space Complexity:** $\\mathcal{O}(1)$ auxiliary space because elements are sorted in-place.
-
-\`\`\`python
-# Quick usage snippet:
-sample = [64, 34, 25, 12, 22, 11, 90]
-sorted_list = bubble_sort(sample)
-print(sorted_list)  # [11, 12, 22, 25, 34, 64, 90]
+\`\`\`${artifactMatch?.[3] || 'text'}
+${deliveredCode}
 \`\`\`
 
-You can preview the full source code in the **Deliverable Preview** card below or click **Download** to save \`bubble_sort.py\` directly to your device. Feel free to ask any follow-up questions to customize or optimize this solution!`;
-        }
+#### Implementation Overview
+- The logic satisfies all constraints with standard idiomatic structure and error boundary guards.
+- The deliverable is saved as **\`${deliveredFilename}\`** in the artifact card below for review or download.`;
       } else {
-        responseText = `### Solution Overview
+        responseText = `### Answer Overview
 
-I have planned, implemented, and verified the requested solution for:
-**"${lastUserMessage.slice(0, 100)}"**
+Regarding your question: **"${lastUserMessage.slice(0, 120)}"**
 
-#### Highlights & Implementation Details
-- **Architecture & Modularity:** Implemented using clean modular patterns with complete error handling.
-- **Verification:** Validated with automated assertions and static checks.
-- **Downloadable Deliverable:** The complete source code deliverable is available in the preview card below ready for direct download.
+#### Detailed Explanation
+- **Core Principles:** This follows standard software engineering principles with clean architectural separation of concerns, strong type validation, and explicit boundary handling.
+- **Best Practices:** Decouple interfaces, handle transient failures gracefully, and verify requirements with deterministic tests.
 
-You can ask any follow-up questions or request modifications to the code!`;
+Feel free to ask any follow-up questions or request specific code implementations!`;
       }
+    } else if (
+      sysInstruction.includes('Authoritative Senior Engineer') ||
+      sysInstruction.includes('Technical Specialist')
+    ) {
+      responseText = `### Technical Analysis
+
+Regarding: **"${lastUserMessage.slice(0, 120)}"**
+
+- **Concepts & Foundations:** Structured systems emphasize maintainability, low coupling, and predictable state transitions.
+- **Design Guidelines:** Ensure idempotent operations and clear API contracts across boundaries.`;
     } else {
       responseText = `Completed processing step for: ${lastUserMessage.slice(0, 100)}... Execution completed with rigorous verification.`;
     }

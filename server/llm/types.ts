@@ -35,6 +35,7 @@ export interface LLMRequestOptions {
 
 export interface LLMResponse {
   text: string;
+  thinking?: string;
   toolCalls?: LLMToolCall[];
   usage: {
     promptTokens: number;

@@ -81,7 +81,7 @@ ${(parsed.findings || []).map((f: any) => `- **[${String(f.severity || 'info').t
 ${(parsed.recommendations || []).map((r: string) => `- ${r}`).join('\n')}
 `;
 
-    const wantsDoc = /audit report|review document|security audit doc/i.test(context.userPrompt);
+    const wantsDoc = /\b(create|write|generate|export|download|save)\b.*\b(audit report|security audit file|code review document)\b/i.test(context.userPrompt);
     let created: string[] = [];
 
     if (wantsDoc) {

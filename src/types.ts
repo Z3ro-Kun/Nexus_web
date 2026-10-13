@@ -1,15 +1,42 @@
+export interface ToolCallRecord {
+  tool: string;
+  query?: string;
+  url?: string;
+  statusCode?: number;
+  extractedLength?: number;
+  args?: Record<string, any>;
+  summary?: string;
+  success: boolean;
+  durationMs?: number;
+  results?: Array<{ title: string; url: string; snippet?: string }>;
+  excerpt?: string;
+}
+
+export interface UserRecord {
+  id: string;
+  username: string;
+  displayName: string;
+  avatarColor: string;
+  createdAt: number;
+}
+
 export interface ChatMessage {
   id: string;
   sender: 'user' | 'assistant';
   content: string;
+  thinking?: string;
   timestamp: number;
   artifactIds?: string[];
   artifacts?: Artifact[];
   agentSummary?: string;
+  toolCalls?: ToolCallRecord[];
+  citations?: SourceCitation[];
 }
 
 export interface TaskRecord {
   id: string;
+  userId?: string;
+  sessionId?: string;
   title: string;
   userPrompt: string;
   createdAt: number;
@@ -37,6 +64,8 @@ export interface TaskRecord {
   plan?: ExecutionPlan;
   activeAgents: string[];
   artifacts: Artifact[];
+  toolCalls?: ToolCallRecord[];
+  citations?: SourceCitation[];
   metrics: {
     totalTokens: number;
     promptTokens: number;
@@ -170,6 +199,7 @@ export interface SystemConfig {
   providers: { id: string; name: string; available: boolean; defaultModel: string }[];
   defaultProvider: string;
   geminiModel: string;
+  openrouterModel?: string;
   groqModel: string;
   roleModels: Record<string, any>;
   tools: {

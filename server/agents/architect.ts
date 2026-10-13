@@ -27,7 +27,7 @@ Write clean, concrete specifications without hand-waving. Include actual TypeScr
     const content = res.text;
     const summary = `Architectural blueprint and domain contracts designed for ${context.userPrompt.slice(0, 60)}...`;
 
-    const wantsDoc = /architect|system design|specification|rfc|blueprint|design doc/i.test(context.userPrompt);
+    const wantsDoc = /\b(create|write|generate|export|download|save)\b.*\b(architecture\s+(spec|document|file)|system design doc|rfc document|blueprint file)\b/i.test(context.userPrompt);
     let created: string[] = [];
 
     if (wantsDoc) {

@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { config } from './server/config.js';
-import { db, DocumentRecord } from './server/db/store.js';
+import { db, DocumentRecord, SafeUserRecord } from './server/db/store.js';
 import { OrchestrationEngine } from './server/orchestrator/engine.js';
 import { eventHub } from './server/orchestrator/events.js';
 import { DocumentParser } from './server/rag/parser.js';
@@ -40,7 +40,93 @@ async function createServer() {
     }
   }
 
+  function getSessionToken(req: express.Request): string | undefined {
+    const authHeader = req.headers['authorization'] as string;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.slice(7).trim();
+      if (token) return token;
+    }
+    const headerToken = req.headers['x-session-token'] as string;
+    if (headerToken && headerToken.trim()) return headerToken.trim();
+    const queryToken = req.query.sessionToken as string || req.query.token as string;
+    if (queryToken && queryToken.trim()) return queryToken.trim();
+    return undefined;
+  }
+
+  function getAuthenticatedUser(req: express.Request): SafeUserRecord | null {
+    const token = getSessionToken(req);
+    if (token) {
+      const validated = db.validateSession(token);
+      if (validated) return validated;
+    }
+    // Fallback for dev / header
+    const legacyUserId = req.headers['x-user-id'] as string;
+    if (legacyUserId && legacyUserId.trim()) {
+      const safe = db.getSafeUser(legacyUserId.trim());
+      if (safe) return safe;
+    }
+    return null;
+  }
+
+  function requireAuth(req: express.Request, res: express.Response): SafeUserRecord | null {
+    const user = getAuthenticatedUser(req);
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required. Please sign in.' });
+      return null;
+    }
+    return user;
+  }
+
   // --- API Routes ---
+
+  // Auth & Session Management
+  app.post('/api/auth/register', (req, res) => {
+    const { username, password, displayName } = req.body;
+    if (!username || typeof username !== 'string' || !username.trim()) {
+      return res.status(400).json({ error: 'Username/ID is required' });
+    }
+    if (!password || typeof password !== 'string' || password.length < 4) {
+      return res.status(400).json({ error: 'Password must be at least 4 characters' });
+    }
+    try {
+      const result = db.registerUser(username, password, displayName);
+      res.json(result);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/auth/login', (req, res) => {
+    const { username, password } = req.body;
+    if (!username || typeof username !== 'string' || !username.trim()) {
+      return res.status(400).json({ error: 'Username/ID is required' });
+    }
+    if (!password || typeof password !== 'string') {
+      return res.status(400).json({ error: 'Password is required' });
+    }
+    try {
+      const result = db.loginUser(username, password);
+      res.json(result);
+    } catch (err: any) {
+      res.status(401).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/auth/logout', (req, res) => {
+    const token = getSessionToken(req);
+    if (token) {
+      db.deleteSession(token);
+    }
+    res.json({ success: true });
+  });
+
+  app.get('/api/auth/me', (req, res) => {
+    const user = getAuthenticatedUser(req);
+    if (!user) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    res.json(user);
+  });
 
   // Health and System Config
   app.get('/api/system/health', (req, res) => {
@@ -58,6 +144,7 @@ async function createServer() {
       providers: llmRouter.getAvailableProviders(),
       defaultProvider: config.defaultProvider,
       geminiModel: config.geminiModel,
+      openrouterModel: config.openrouterModel,
       groqModel: config.groqModel,
       roleModels: config.roleModels,
       tools: toolRegistry.list().map((t) => ({
@@ -69,20 +156,24 @@ async function createServer() {
     });
   });
 
-  // Task Management
+  // Task Management (Session / User Scoped)
   app.get('/api/tasks', (req, res) => {
-    const tasks = db.listTasks();
+    const user = requireAuth(req, res);
+    if (!user) return;
+    const tasks = db.listTasks(user.id);
     res.json(tasks);
   });
 
   app.post('/api/tasks', async (req, res) => {
+    const user = requireAuth(req, res);
+    if (!user) return;
     const { prompt } = req.body;
     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
       return res.status(400).json({ error: 'Task prompt cannot be empty' });
     }
 
     try {
-      const task = await OrchestrationEngine.submitTask(prompt.trim());
+      const task = await OrchestrationEngine.submitTask(prompt.trim(), { userId: user.id });
       res.json(task);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -90,9 +181,11 @@ async function createServer() {
   });
 
   app.get('/api/tasks/:id', (req, res) => {
-    const task = db.getTask(req.params.id);
+    const user = requireAuth(req, res);
+    if (!user) return;
+    const task = db.getTask(req.params.id, user.id);
     if (!task) {
-      return res.status(400).json({ error: 'Task not found' });
+      return res.status(404).json({ error: 'Task not found or access denied for this user session' });
     }
     const artifacts = db.getArtifactsForTask(req.params.id);
     const events = db.getEventsForTask(req.params.id);
@@ -103,12 +196,22 @@ async function createServer() {
     });
   });
 
+  app.delete('/api/tasks/:id', (req, res) => {
+    const user = requireAuth(req, res);
+    if (!user) return;
+    const taskId = req.params.id;
+    const deleted = db.deleteTask(taskId, user.id);
+    res.json({ success: deleted });
+  });
+
   // Real-Time Server-Sent Events (SSE) Stream
   app.get('/api/tasks/:id/events', (req, res) => {
+    const token = (req.query.token as string) || (req.headers['x-session-token'] as string);
+    const user = token ? db.validateSession(token) : getAuthenticatedUser(req);
     const taskId = req.params.id;
-    const task = db.getTask(taskId);
+    const task = db.getTask(taskId, user?.id);
     if (!task) {
-      return res.status(404).json({ error: 'Task not found' });
+      return res.status(404).json({ error: 'Task not found or access denied' });
     }
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -122,9 +225,22 @@ async function createServer() {
       res.write(`data: ${JSON.stringify(evt)}\n\n`);
     }
 
+    // If task is already completed or failed, finish stream cleanly so client does not reconnect
+    if (task.status === 'completed' || task.status === 'failed') {
+      res.end();
+      return;
+    }
+
+    const keepAlive = setInterval(() => {
+      if (!res.writableEnded) {
+        res.write(': keepalive\n\n');
+      }
+    }, 15000);
+
     const unsubscribe = eventHub.subscribe(taskId, res);
 
     req.on('close', () => {
+      clearInterval(keepAlive);
       unsubscribe();
       res.end();
     });
@@ -132,14 +248,20 @@ async function createServer() {
 
   // Clarification Q&A Flow
   app.post('/api/tasks/:id/clarify', async (req, res) => {
+    const user = requireAuth(req, res);
+    if (!user) return;
+    const task = db.getTask(req.params.id, user.id);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found or access denied' });
+    }
     const { answer } = req.body;
     if (!answer || typeof answer !== 'string') {
       return res.status(400).json({ error: 'Answer is required' });
     }
 
     try {
-      const task = await OrchestrationEngine.answerClarification(req.params.id, answer.trim());
-      res.json(task);
+      const updated = await OrchestrationEngine.answerClarification(req.params.id, answer.trim());
+      res.json(updated);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
@@ -147,14 +269,20 @@ async function createServer() {
 
   // Follow-Up Request in Conversation
   app.post('/api/tasks/:id/follow-up', async (req, res) => {
+    const user = requireAuth(req, res);
+    if (!user) return;
+    const task = db.getTask(req.params.id, user.id);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found or access denied' });
+    }
     const { prompt } = req.body;
     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
       return res.status(400).json({ error: 'Follow-up prompt cannot be empty' });
     }
 
     try {
-      const task = await OrchestrationEngine.submitFollowUp(req.params.id, prompt.trim());
-      res.json(task);
+      const updated = await OrchestrationEngine.submitFollowUp(req.params.id, prompt.trim());
+      res.json(updated);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
@@ -162,6 +290,12 @@ async function createServer() {
 
   // Cancel Task
   app.post('/api/tasks/:id/cancel', (req, res) => {
+    const user = requireAuth(req, res);
+    if (!user) return;
+    const task = db.getTask(req.params.id, user.id);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found or access denied' });
+    }
     OrchestrationEngine.cancelTask(req.params.id);
     res.json({ success: true, message: 'Task cancelled' });
   });

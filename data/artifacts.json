@@ -28,5 +28,50 @@
     "sizeBytes": 1103,
     "verifiedIntegrity": true,
     "version": 1
+  },
+  {
+    "id": "art_task_1791656602740_hlj8_1791656615079_y0ua",
+    "taskId": "task_1791656602740_hlj8",
+    "title": "leetcode_570.sql",
+    "filename": "leetcode_570.sql",
+    "fileType": "code",
+    "language": "sql",
+    "content": "SELECT e.Name\nFROM Employee e\nJOIN Employee r ON e.EmployeeId = r.ManagerId\nGROUP BY e.Name\nHAVING COUNT(*) >= 5\nORDER BY e.Name;",
+    "createdAt": 1791656615079,
+    "updatedAt": 1791656615079,
+    "createdByAgent": "implementer",
+    "sizeBytes": 129,
+    "verifiedIntegrity": true,
+    "version": 1
+  },
+  {
+    "id": "art_task_1791657109706_jttk_1791657122180_aakt",
+    "taskId": "task_1791657109706_jttk",
+    "title": "leetcode_570.sql",
+    "filename": "leetcode_570.sql",
+    "fileType": "code",
+    "language": "sql",
+    "content": "SELECT e.name\nFROM Employee e\nJOIN Employee d ON e.employee_id = d.manager_id\nGROUP BY e.name\nHAVING COUNT(*) >= 5\nORDER BY e.name;",
+    "createdAt": 1791657122180,
+    "updatedAt": 1791657122180,
+    "createdByAgent": "implementer",
+    "sizeBytes": 131,
+    "verifiedIntegrity": true,
+    "version": 1
+  },
+  {
+    "id": "art_task_1791657281079_xnsr_1791657316907_j2e7",
+    "taskId": "task_1791657281079_xnsr",
+    "title": "leetcode_570.sql",
+    "filename": "leetcode_570.sql",
+    "fileType": "code",
+    "language": "sql",
+    "content": "-- LeetCode 570: Managers with at Least 5 Direct Reports\nSELECT e.name\nFROM Employee e\nJOIN Employee r ON e.id = r.managerId\nGROUP BY e.id, e.name\nHAVING COUNT(r.id) >= 5;\n",
+    "createdAt": 1791657316907,
+    "updatedAt": 1791657316907,
+    "createdByAgent": "implementer",
+    "sizeBytes": 172,
+    "verifiedIntegrity": true,
+    "version": 1
   }
 ]

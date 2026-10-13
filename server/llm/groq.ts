@@ -1,5 +1,47 @@
 import { LLMMessage, LLMProvider, LLMRequestOptions, LLMResponse, LLMToolCall } from './types.js';
 
+function extractThinkingAndClean(rawContent: string, initialThinking = ''): { text: string; thinking?: string } {
+  let thinking = initialThinking.trim();
+  let content = rawContent || '';
+
+  const thinkMatches = content.matchAll(/<think>([\s\S]*?)<\/think>/gi);
+  for (const m of thinkMatches) {
+    if (m[1]) {
+      thinking = (thinking ? thinking + '\n\n' : '') + m[1].trim();
+    }
+  }
+  content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+  const unclosedThink = content.match(/<think>([\s\S]*)$/i);
+  if (unclosedThink) {
+    thinking = (thinking ? thinking + '\n\n' : '') + unclosedThink[1].trim();
+    content = content.replace(/<think>([\s\S]*)$/i, '').trim();
+  }
+
+  content = content.replace(/<(?:thought|reasoning)>([\s\S]*?)<\/(?:thought|reasoning)>/gi, (_, body) => {
+    thinking = (thinking ? thinking + '\n\n' : '') + body.trim();
+    return '';
+  }).trim();
+  const unclosedThought = content.match(/<(?:thought|reasoning)>([\s\S]*)$/i);
+  if (unclosedThought) {
+    thinking = (thinking ? thinking + '\n\n' : '') + unclosedThought[1].trim();
+    content = content.replace(/<(?:thought|reasoning)>([\s\S]*)$/i, '').trim();
+  }
+
+  content = content.replace(/^(?:User Safety:\s*safe\s*)+/i, '').trim();
+
+  let text = content;
+  if (!text && thinking) {
+    const paragraphs = thinking.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+    text = paragraphs[paragraphs.length - 1] || thinking;
+  }
+
+  return {
+    text: text.trim(),
+    thinking: thinking.trim() || undefined,
+  };
+}
+
 export class GroqProvider implements LLMProvider {
   public name = 'groq';
   private apiKey: string;
@@ -92,7 +134,14 @@ export class GroqProvider implements LLMProvider {
 
       const data = await res.json();
       const choice = data.choices?.[0];
-      const text = choice?.message?.content || '';
+      const rawContent = choice?.message?.content || '';
+      const initialReasoning = choice?.message?.reasoning || choice?.message?.reasoning_content || '';
+      const cleaned = extractThinkingAndClean(rawContent, initialReasoning);
+
+      let text = cleaned.text;
+      if (options.responseFormat === 'json') {
+        text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+      }
 
       const toolCalls: LLMToolCall[] = [];
       if (choice?.message?.tool_calls) {
@@ -118,6 +167,7 @@ export class GroqProvider implements LLMProvider {
 
       return {
         text,
+        thinking: cleaned.thinking,
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
         usage: {
           promptTokens,

@@ -4,6 +4,24 @@ import { AgentContext, AgentResult } from './types.js';
 export class RequirementsAnalystAgent {
   static async analyze(context: AgentContext): Promise<AgentResult> {
     const rawLower = context.userPrompt.toLowerCase().trim();
+
+    // Informational, research, and factual inquiries should proceed directly to planning/research tools without blocking for clarification
+    const isResearchOrInformational =
+      /^(tell me\b|is\b|are\b|what\b|how\b|why\b|has\b|have\b|can you\b|does\b|did\b|check\b|verify\b|search\b|find\b|who\b|when\b|where\b|show me\b)/i.test(rawLower);
+
+    if (isResearchOrInformational) {
+      return {
+        role: 'requirements',
+        summary: `Actionable research inquiry: "${context.userPrompt.slice(0, 70)}"`,
+        clarificationNeeded: false,
+        data: {
+          status: 'clear',
+          assumptions: ['Investigating live evidence via web search, document intelligence, and technical tools'],
+          reasoning: 'Informational and factual query is routed directly to the research and synthesis pipeline.',
+        },
+      };
+    }
+
     if (rawLower.length < 20 || rawLower.includes('maybe') || rawLower.includes('something like') || rawLower.includes('whatever')) {
       return {
         role: 'requirements',

@@ -45,9 +45,9 @@ export const SystemConfigModal: React.FC<SystemConfigModalProps> = ({ isOpen, on
           <div>
             <div className="flex items-center gap-1.5 font-semibold text-slate-200 uppercase tracking-wider text-[11px] mb-3">
               <Cpu className="w-4 h-4 text-cyan-400" />
-              <span>Configured LLM Providers</span>
+              <span>Configured LLM Providers & Free Engines</span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {config?.providers.map((p) => (
                 <div
                   key={p.id}
@@ -64,7 +64,7 @@ export const SystemConfigModal: React.FC<SystemConfigModalProps> = ({ isOpen, on
                         {p.available ? 'ACTIVE' : 'STANDBY'}
                       </span>
                     </div>
-                    <div className="text-[11px] text-slate-400 font-mono mt-1">
+                    <div className="text-[11px] text-slate-400 font-mono mt-1 break-all">
                       Default: {p.defaultModel}
                     </div>
                   </div>
@@ -75,23 +75,42 @@ export const SystemConfigModal: React.FC<SystemConfigModalProps> = ({ isOpen, on
 
           {/* Role Models */}
           <div>
-            <div className="font-semibold text-slate-200 uppercase tracking-wider text-[11px] mb-3">
-              Agent Role Model Assignments
+            <div className="flex items-center justify-between mb-3">
+              <div className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">
+                Agent Role Model Assignments (Free Specialized Engines)
+              </div>
+              <span className="text-[10px] text-cyan-400/90 font-mono bg-cyan-950/60 border border-cyan-800/50 px-2 py-0.5 rounded">
+                Role-Specialized & Free Tiers
+              </span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               {config?.roleModels &&
-                Object.entries(config.roleModels).map(([role, cfg]: [string, any]) => (
-                  <div
-                    key={role}
-                    className="p-2.5 bg-slate-950/60 border border-slate-800/80 rounded-lg text-[11px]"
-                  >
-                    <div className="font-semibold text-cyan-400 uppercase tracking-tight mb-0.5">
-                      {role}
+                Object.entries(config.roleModels).map(([role, cfg]: [string, any]) => {
+                  const isFree = cfg.model?.includes(':free') || cfg.model?.includes('flash') || cfg.provider === 'mock';
+                  return (
+                    <div
+                      key={role}
+                      className="p-2.5 bg-slate-950/60 border border-slate-800/80 rounded-lg text-[11px] flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-semibold text-cyan-400 uppercase tracking-tight text-[11px]">
+                            {role}
+                          </span>
+                          {isFree && (
+                            <span className="text-[9px] font-mono px-1 py-0.2 bg-emerald-950 text-emerald-400 border border-emerald-800/40 rounded">
+                              FREE
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-slate-300 capitalize text-[11px] font-medium">{cfg.provider}</div>
+                        <div className="text-[10px] text-slate-400 font-mono truncate mt-0.5" title={cfg.model}>
+                          {cfg.model}
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-slate-300 capitalize">{cfg.provider}</div>
-                    <div className="text-[10px] text-slate-500 font-mono truncate">{cfg.model}</div>
-                  </div>
-                ))}
+                  );
+                })}
             </div>
           </div>
 

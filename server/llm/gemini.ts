@@ -6,7 +6,7 @@ export class GeminiProvider implements LLMProvider {
   private ai: GoogleGenAI | null = null;
   private defaultModel: string;
 
-  constructor(apiKey?: string, defaultModel = 'gemini-3.8-flash') {
+  constructor(apiKey?: string, defaultModel = 'gemini-3.6-flash') {
     const key = apiKey || process.env.GEMINI_API_KEY || '';
     this.defaultModel = defaultModel;
     if (key && key !== 'MY_GEMINI_API_KEY') {
@@ -35,7 +35,10 @@ export class GeminiProvider implements LLMProvider {
       throw new Error('Gemini API is not configured or GEMINI_API_KEY is not set');
     }
 
-    const modelName = options.model || this.defaultModel;
+    let modelName = options.model || this.defaultModel;
+    if (modelName === 'gemini-3.8-flash') {
+      modelName = 'gemini-3.6-flash';
+    }
 
     // Convert LLM messages to contents
     let systemInstruction = options.systemInstruction || '';

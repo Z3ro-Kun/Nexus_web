@@ -1,7 +1,7 @@
 import { db } from '../db/store.js';
 import { llmRouter } from '../llm/router.js';
 import { toolRegistry } from '../tools/registry.js';
-import { AgentContext, AgentResult } from './types.js';
+import { AgentContext, AgentResult, isArtifactNeeded } from './types.js';
 
 export interface VerificationTestResult {
   name: string;
@@ -16,24 +16,34 @@ export class VerifierAgent {
     const artifacts = db.getArtifactsForTask(context.taskId);
     const testsRun: VerificationTestResult[] = [];
     const findings: string[] = [];
+    const artifactExpected = isArtifactNeeded(context.userPrompt);
 
-    // --- Deterministic Check 1: Artifact Existence & File Integrity ---
+    // --- Deterministic Check 1: Artifact Existence & File Integrity (when artifact requested) ---
     const startT1 = Date.now();
-    const hasArtifacts = artifacts.length > 0;
-    const nonEmptyFiles = artifacts.filter((a) => a.sizeBytes > 0 && a.content.trim().length > 0);
-    const integrityPass = hasArtifacts && nonEmptyFiles.length === artifacts.length;
+    if (artifactExpected) {
+      const hasArtifacts = artifacts.length > 0;
+      const nonEmptyFiles = artifacts.filter((a) => a.sizeBytes > 0 && a.content.trim().length > 0);
+      const integrityPass = hasArtifacts && nonEmptyFiles.length === artifacts.length;
 
-    testsRun.push({
-      name: 'Deliverable Integrity & File Existence',
-      passed: integrityPass,
-      output: integrityPass
-        ? `Verified ${artifacts.length} artifacts on disk. All files are non-empty and structurally intact.`
-        : `Defect: Expected deliverables missing or empty.`,
-      durationMs: Date.now() - startT1,
-    });
+      testsRun.push({
+        name: 'Deliverable Integrity & File Existence',
+        passed: integrityPass,
+        output: integrityPass
+          ? `Verified ${artifacts.length} artifacts on disk. All files are non-empty and structurally intact.`
+          : `Defect: Expected deliverables missing or empty.`,
+        durationMs: Date.now() - startT1,
+      });
 
-    if (!integrityPass) {
-      findings.push('CRITICAL: One or more requested deliverables were not persisted or are empty.');
+      if (!integrityPass) {
+        findings.push('CRITICAL: One or more requested deliverables were not persisted or are empty.');
+      }
+    } else {
+      testsRun.push({
+        name: 'Informational Query Integrity',
+        passed: true,
+        output: 'Verified request is conceptual / informational; no redundant placeholder file was forced.',
+        durationMs: Date.now() - startT1,
+      });
     }
 
     // --- Deterministic Check 2: Code Syntax & Sandbox Test Suite ---
@@ -109,6 +119,11 @@ export class VerifierAgent {
 
     // --- LLM Criteria Coverage Analysis ---
     const allTestsPassed = testsRun.every((t) => t.passed);
+    const upstreamText = Object.entries(context.completedNodeOutputs || {})
+      .map(([id, out]: [string, any]) => `[Node ${id}]:\n${out.details || out.summary || ''}`)
+      .join('\n\n')
+      .slice(0, 4000);
+
     const prompt = `You are a Principal Verification Engineer.
 Objective: "${context.userPrompt}"
 Acceptance Criteria:
@@ -117,13 +132,17 @@ ${(node?.acceptanceCriteria || []).map((c) => `- ${c}`).join('\n')}
 Automated Deterministic Test Results:
 ${testsRun.map((t) => `- [${t.passed ? 'PASSED' : 'FAILED'}] ${t.name}: ${t.output}`).join('\n')}
 
-Existing Findings:
-${findings.join('\n') || 'None so far.'}
+Upstream Agent Findings & Implementation Output:
+${upstreamText || 'None recorded.'}
 
-Make a definitive, substantive verification decision:
-1. Did the implementation satisfy the objective and all acceptance criteria?
-2. Are there any unsupported claims or incomplete features?
-3. Should this task be approved ("passed") or rejected for targeted replanning ("failed" / "needs_revision")?
+Existing Findings & Defect Log:
+${findings.join('\n') || 'None recorded.'}
+
+VERIFICATION GUIDELINES:
+1. Deliverable Deliverables: If code files were requested, verify they exist, compile, and meet acceptance criteria.
+2. Informational & Conversational Answers: If the user asked an analytical or technical question, verify that the answer is accurate, direct, well-structured, and avoids fabricated claims. If the answer provides verified findings or transparently explains external source limitations with official verification instructions, approve it as "passed". Do NOT fail an honest, verified informational answer.
+3. Anti-Hallucination & Provenance Audit: REJECT as "needs_revision" or "failed" if the upstream response invents specific numeric rankings, scores, team IDs (e.g. icpcol...), or unverified URLs (e.g. personal GitHub pages or unofficial domains) that were NOT found in the live evidence.
+4. Verdict Choice: Approve ("passed") only if free of fabricated numbers/ranks/URLs and all assertions pass.
 
 Respond ONLY in valid JSON matching:
 {
@@ -138,7 +157,7 @@ Respond ONLY in valid JSON matching:
 
     const res = await llmRouter.callForRole('verifier', [{ role: 'user', content: prompt }], {
       responseFormat: 'json',
-      systemInstruction: 'You are an uncompromising Verification Engineer. Refuse to pass deliverables with failing tests or unverified claims.',
+      systemInstruction: 'You are an objective Verification Engineer. Approve valid implementations and truthful, high-integrity explanations. Reject only for broken assertions, syntax errors, or fabricated claims.',
     });
 
     let parsed: any;
@@ -176,7 +195,7 @@ ${(parsed.criteriaCoverage || []).map((c: any) => `- [${c.verified ? 'x' : ' '}]
 ${(parsed.actionableDefects && parsed.actionableDefects.length > 0) ? `## Actionable Defects Identified\n${parsed.actionableDefects.map((d: string) => `- ❌ ${d}`).join('\n')}` : '## Verification Conclusion\nNo outstanding defects detected. System ready for final response.'}
 `;
 
-    const wantsDoc = /verification report|test report doc|test audit document/i.test(context.userPrompt);
+    const wantsDoc = /\b(create|write|generate|export|download|save)\b.*\b(verification report file|test report document|test audit file)\b/i.test(context.userPrompt);
     let created: string[] = [];
 
     if (wantsDoc) {

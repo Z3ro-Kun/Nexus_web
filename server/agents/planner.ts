@@ -1,6 +1,6 @@
 import { DAGNode } from '../db/store.js';
 import { llmRouter } from '../llm/router.js';
-import { AgentContext } from './types.js';
+import { AgentContext, isArtifactNeeded } from './types.js';
 
 export interface PlanOutput {
   objective: string;
@@ -9,7 +9,84 @@ export interface PlanOutput {
 
 export class PlannerAgent {
   static async plan(context: AgentContext): Promise<PlanOutput> {
+    const wantsArtifact = isArtifactNeeded(context.userPrompt);
+
     if (context.isFollowUp) {
+      const userMsgs = (context.conversationHistory || []).filter((m: any) => m.sender === 'user');
+      const originalUserMsg = userMsgs[0]?.content || context.userPrompt;
+      const isMetaFeedback = /^(you (didn't|did not|didnt) (give|provide|show|output|answer)|why (no|is there no|didn't you) output|give me (an? )?output|where is the (output|answer|response)|retry|repeat|no output)/i.test(context.userPrompt);
+      const effectiveTopic = isMetaFeedback ? originalUserMsg : context.userPrompt;
+
+      if (!wantsArtifact) {
+        return {
+          objective: isMetaFeedback
+            ? `Address inquiry and provide complete response for: "${effectiveTopic}"`
+            : `Address user follow-up inquiry: "${context.userPrompt}"`,
+          nodes: [
+            {
+              id: 'followup_research_1',
+              title: `Investigate Evidence & Details (${effectiveTopic.slice(0, 40)})`,
+              description: 'Retrieve technical context, live standings evidence, or verified references.',
+              role: 'researcher',
+              dependencies: [],
+              status: 'pending',
+              inputs: {},
+              expectedOutputs: 'Verified evidence notes and reference findings.',
+              acceptanceCriteria: [
+                'Collects verified facts and documentation without hallucination',
+                'Identifies real-world sources and context',
+              ],
+              retryCount: 0,
+            },
+            {
+              id: 'followup_impl_2',
+              title: `Synthesize Factual Follow-Up Response (${effectiveTopic.slice(0, 40)})`,
+              description: 'Compose a direct, comprehensive, and authoritative response addressing the user prompt.',
+              role: 'implementer',
+              dependencies: ['followup_research_1'],
+              status: 'pending',
+              inputs: {},
+              expectedOutputs: 'Direct technical answer answering user follow-up.',
+              acceptanceCriteria: [
+                'Directly and accurately answers the user follow-up question',
+                'Clearly distinguishes verified facts from unverified inferences',
+              ],
+              retryCount: 0,
+            },
+            {
+              id: 'followup_review_3',
+              title: 'Independent Review of Explanation & Accuracy',
+              description: 'Audit the synthesized response for factual accuracy, safety, and clarity.',
+              role: 'reviewer',
+              dependencies: ['followup_impl_2'],
+              status: 'pending',
+              inputs: {},
+              expectedOutputs: 'Review verification verdict.',
+              acceptanceCriteria: [
+                'Response is free of hallucinations or fabricated URLs/ranks',
+                'Accurately reflects official regulations and verified evidence',
+              ],
+              retryCount: 0,
+            },
+            {
+              id: 'followup_verify_4',
+              title: 'Verify Response Completeness & Reliability',
+              description: 'Validate that the follow-up request is fully answered with high integrity.',
+              role: 'verifier',
+              dependencies: ['followup_review_3'],
+              status: 'pending',
+              inputs: {},
+              expectedOutputs: 'Formal verification verdict.',
+              acceptanceCriteria: [
+                'User follow-up is thoroughly and truthfully addressed',
+                'No unverified claims or broken promises',
+              ],
+              retryCount: 0,
+            },
+          ],
+        };
+      }
+
       return {
         objective: `Update deliverables for follow-up: "${context.userPrompt}"`,
         nodes: [
@@ -71,15 +148,16 @@ ${context.assumptions.map((a) => `- ${a}`).join('\n') || '- Standard production 
 Available Document Context:
 ${context.documentEvidence ? context.documentEvidence.slice(0, 800) : 'None'}
 
+PLANNING CONSTRAINT:
+${wantsArtifact ? 'The user is requesting a tangible code deliverable/file. Plan tasks to design, implement, review, and formally verify the requested deliverable.' : 'The user asked an informational, conceptual, or conversational question. Do NOT plan file deliverable generation or file artifact creation tasks. Decompose into technical evidence research, comprehensive explanation synthesis, factual review, and completeness verification.'}
+
 RULES:
-1. Decompose into 4 to 6 focused tasks assigned to specialized roles:
-   - "architect": Schema, component interfaces, architectural blueprints.
-   - "researcher": Web facts, document extraction, domain formulas, standards.
-   - "implementer": Code generation, tool calculations, runnable files.
-   - "reviewer": Independent security, maintainability, and code audit.
-   - "verifier": Substantive verification, test execution, acceptance criteria validation.
-2. Exploit PARALLEL execution:
-   - Tasks with NO dependencies run in parallel at the start (e.g. "architect" and "researcher" should run concurrently!).
+1. Decompose into 3 to 5 focused tasks assigned to specialized roles:
+   - "researcher": Web facts, standards, references, background concepts.
+   - "implementer": ${wantsArtifact ? 'Code generation, runnable files, and tool calculations.' : 'Synthesis of comprehensive, well-structured explanation and technical answer.'}
+   - "reviewer": Technical correctness and conceptual accuracy audit.
+   - "verifier": Completeness validation and acceptance criteria check.
+2. Exploit PARALLEL execution where prerequisites allow.
 3. Dependent tasks must explicitly list prerequisite node IDs in "dependencies".
 4. Every node MUST have clear, measurable "acceptanceCriteria" (at least 2).
 
@@ -142,6 +220,76 @@ Respond ONLY with valid JSON matching:
   }
 
   private static getDefaultPlan(prompt: string): PlanOutput {
+    const wantsArtifact = isArtifactNeeded(prompt);
+
+    if (!wantsArtifact) {
+      return {
+        objective: prompt,
+        nodes: [
+          {
+            id: 'dag_research_1',
+            title: 'Gather Technical References & Evidence',
+            description: 'Extract technical standards, concepts, and factual background for the question.',
+            role: 'researcher',
+            dependencies: [],
+            status: 'pending',
+            inputs: {},
+            expectedOutputs: 'Verified technical facts and references.',
+            acceptanceCriteria: [
+              'Technical background and core concepts are factually verified',
+              'Relevant standards or examples are cited',
+            ],
+            retryCount: 0,
+          },
+          {
+            id: 'dag_synth_2',
+            title: 'Synthesize Comprehensive Technical Explanation',
+            description: 'Formulate an authoritative, structured explanation with code examples if helpful.',
+            role: 'implementer',
+            dependencies: ['dag_research_1'],
+            status: 'pending',
+            inputs: {},
+            expectedOutputs: 'Detailed technical explanation and structured answer.',
+            acceptanceCriteria: [
+              'Directly answers the user question with zero irrelevant placeholders',
+              'Formatted in clear Markdown with concrete explanations',
+            ],
+            retryCount: 0,
+          },
+          {
+            id: 'dag_review_3',
+            title: 'Review Explanation for Accuracy and Clarity',
+            description: 'Audit the synthesized explanation for conceptual correctness and readability.',
+            role: 'reviewer',
+            dependencies: ['dag_synth_2'],
+            status: 'pending',
+            inputs: {},
+            expectedOutputs: 'Review audit findings.',
+            acceptanceCriteria: [
+              'Explanation is free of misleading or hallucinated claims',
+              'Adheres to modern software engineering best practices',
+            ],
+            retryCount: 0,
+          },
+          {
+            id: 'dag_verify_4',
+            title: 'Verify Response Completeness',
+            description: 'Validate that all aspects of the user query are answered satisfactorily.',
+            role: 'verifier',
+            dependencies: ['dag_review_3'],
+            status: 'pending',
+            inputs: {},
+            expectedOutputs: 'Verification report.',
+            acceptanceCriteria: [
+              'User query fully addressed without missing core aspects',
+              'Zero unfulfilled claims or dangling promises',
+            ],
+            retryCount: 0,
+          },
+        ],
+      };
+    }
+
     return {
       objective: prompt,
       nodes: [
